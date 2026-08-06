@@ -21,6 +21,8 @@ Default dev URL: `http://localhost:5001`
 GET  /health
 POST /api/images          # multipart file upload
 GET  /api/images/<name>   # serve stored image
+POST /api/meetups/{id}/location   # authenticated; compute ETA
+POST /api/notifications/push    # authenticated; send FCM to recipient
 ```
 
 ### Planned
@@ -49,7 +51,8 @@ sequenceDiagram
 ## Security
 
 - Protected routes verify `Authorization: Bearer <Firebase ID token>`
-- Image upload will require auth (not yet enforced)
+- **Image upload and download** require a valid Firebase token; the API checks community membership via Firestore before serving bytes
+- Images are stored in a **private** GCS bucket (or local disk in dev); clients never receive permanent public object URLs
 - Penalty and payout logic runs only in webhook handlers — never in the client
 
 ## Deployment
