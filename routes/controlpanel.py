@@ -3,8 +3,10 @@ from flask import Blueprint, jsonify, request
 from services.auth import AuthError
 from services.controlpanel_auth import ControlpanelAccessError, verify_controlpanel_request
 from services.controlpanel_bans import BanError, create_ban, is_banned, list_bans, remove_ban
+from services.community_pipeline import list_categories
 from services.controlpanel_listings import (
     ListingError,
+    create_bulk_test_listings,
     create_test_listing,
     get_listing_metadata,
     list_communities,
@@ -103,6 +105,56 @@ def get_communities():
         return _access_error_response(exc)
 
     return jsonify({"communities": list_communities()})
+
+
+@controlpanel_bp.get("/categories")
+def get_categories():
+    try:
+        verify_controlpanel_request(request.headers.get("Authorization"))
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except ControlpanelAccessError as exc:
+        return _access_error_response(exc)
+
+    return jsonify({"categories": list_categories()})
+
+
+@controlpanel_bp.post("/test-listings/bulk")
+def post_bulk_test_listings():
+    try:
+        verify_controlpanel_request(request.headers.get("Authorization"))
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except ControlpanelAccessError as exc:
+        return _access_error_response(exc)
+
+    payload = request.get_json(silent=True) or {}
+    community_ids = payload.get("communityIds") or []
+    if isinstance(community_ids, str):
+        community_ids = [community_ids]
+
+    try:
+        result = create_bulk_test_listings(
+            count=int(payload.get("count", 1)),
+            community_ids=[str(value) for value in community_ids],
+            seller_email=payload.get("sellerEmail"),
+            category_id=str(payload.get("categoryId", "general")),
+            randomize_categories=bool(payload.get("randomizeCategories", False)),
+            center_lat=payload.get("centerLat"),
+            center_lng=payload.get("centerLng"),
+            radius_miles=float(payload.get("radiusMiles", 0)),
+            scatter_location=bool(payload.get("scatterLocation", True)),
+            city=payload.get("city"),
+            region=payload.get("region"),
+            location_label=payload.get("locationLabel"),
+            min_price=float(payload.get("minPrice", 5)),
+            max_price=float(payload.get("maxPrice", 250)),
+            use_random_image=bool(payload.get("useRandomImage", True)),
+        )
+    except ListingError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+
+    return jsonify(result), 201
 
 
 @controlpanel_bp.post("/test-listings")

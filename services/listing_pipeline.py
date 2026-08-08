@@ -11,7 +11,7 @@ from services.authorization import (
 )
 from services.firebase_app import get_db
 from services.geohash import encode_geohash
-from services.listing_search import TypesenseClient
+from services.browse_search import TypesenseClient
 from services.listing_validation import ValidationError, validate_create_listing_payload, validate_update_listing_payload
 
 
@@ -120,15 +120,19 @@ def _sync_search_index(listing_id: str, listing: dict) -> None:
 
     location = listing.get("location")
     if location:
-        document["lat"] = location["lat"]
-        document["lng"] = location["lng"]
-        document["geohash"] = location.get("geohash") or encode_geohash(
-            location["lat"], location["lng"]
-        )
+        lat = location["lat"]
+        lng = location["lng"]
+        document["lat"] = lat
+        document["lng"] = lng
+        document["location"] = [lat, lng]
+        document["hasLocation"] = True
+        document["geohash"] = location.get("geohash") or encode_geohash(lat, lng)
         if location.get("city"):
             document["city"] = location["city"]
         if location.get("region"):
             document["region"] = location["region"]
+    else:
+        document["hasLocation"] = False
 
     client.upsert(document)
 

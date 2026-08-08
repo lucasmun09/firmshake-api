@@ -14,7 +14,7 @@ def test_haversine_distance():
 
 
 def test_matches_keyword():
-    listing = {"title": "Red Mountain Bike", "description": "Great condition"}
+    listing = {"title": "Red Mountain Bike", "sellerName": "Sam", "description": "Great condition"}
     assert matches_keyword(listing, "mountain bike") is True
     assert matches_keyword(listing, "blue car") is False
 

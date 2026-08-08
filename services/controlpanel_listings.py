@@ -4,7 +4,15 @@ from google.cloud import firestore
 
 from google.cloud.firestore_v1 import FieldFilter
 
+from services.controlpanel_random_listings import (
+    clamp_bulk_count,
+    random_listing_description,
+    random_listing_title,
+    random_point_within_radius_miles,
+    random_price,
+)
 from services.controlpanel_test_accounts import create_test_account
+from services.community_pipeline import list_categories
 from services.firebase_app import get_db
 from services.geohash import encode_geohash
 from services.listing_search import TypesenseClient
@@ -50,6 +58,7 @@ def create_test_listing(
     price: float,
     community_ids: list[str],
     seller_email: str | None = None,
+    seller: dict | None = None,
     category_id: str = DEFAULT_CATEGORY_ID,
     lat: float | None = None,
     lng: float | None = None,
@@ -69,7 +78,7 @@ def create_test_listing(
     if not normalized_communities:
         normalized_communities = [ALL_COMMUNITY_ID]
 
-    seller = _resolve_seller(seller_email)
+    seller = seller or _resolve_seller(seller_email)
     listing_ref = get_db().collection("listings").document()
     title_lower = title.strip().lower()
 
@@ -124,6 +133,79 @@ def create_test_listing(
         "sellerId": seller["uid"],
         "sellerEmail": seller["email"],
         "imageUrl": image_urls[0],
+    }
+
+
+def create_bulk_test_listings(
+    *,
+    count: int,
+    community_ids: list[str],
+    seller_email: str | None = None,
+    category_id: str = DEFAULT_CATEGORY_ID,
+    randomize_categories: bool = False,
+    center_lat: float | None = None,
+    center_lng: float | None = None,
+    radius_miles: float = 0,
+    scatter_location: bool = True,
+    city: str | None = None,
+    region: str | None = None,
+    location_label: str | None = None,
+    min_price: float = 5,
+    max_price: float = 250,
+    use_random_image: bool = True,
+) -> dict:
+    resolved_count = clamp_bulk_count(count)
+    if center_lat is None or center_lng is None:
+        raise ListingError("centerLat and centerLng are required for bulk generation", 400)
+
+    category_pool = [entry["id"] for entry in list_categories() if entry.get("id")]
+    if not category_pool:
+        category_pool = [DEFAULT_CATEGORY_ID]
+
+    fixed_category = (category_id or DEFAULT_CATEGORY_ID).strip() or DEFAULT_CATEGORY_ID
+    if not randomize_categories and fixed_category not in category_pool:
+        category_pool.append(fixed_category)
+
+    seller = _resolve_seller(seller_email)
+    listing_ids: list[str] = []
+    errors: list[str] = []
+
+    for index in range(1, resolved_count + 1):
+        try:
+            chosen_category = (
+                secrets.choice(category_pool) if randomize_categories else fixed_category
+            )
+            lat, lng = center_lat, center_lng
+            if scatter_location and radius_miles > 0:
+                lat, lng = random_point_within_radius_miles(center_lat, center_lng, radius_miles)
+
+            listing = create_test_listing(
+                title=random_listing_title(),
+                description=random_listing_description(index),
+                price=random_price(min_price, max_price),
+                community_ids=community_ids,
+                seller=seller,
+                category_id=chosen_category,
+                lat=lat,
+                lng=lng,
+                city=city,
+                region=region,
+                location_label=location_label,
+                use_random_image=use_random_image,
+            )
+            listing_ids.append(listing["id"])
+        except ListingError as exc:
+            errors.append(str(exc))
+        except Exception as exc:
+            errors.append(f"Listing {index}: {exc}")
+
+    return {
+        "requested": resolved_count,
+        "created": len(listing_ids),
+        "failed": len(errors),
+        "listingIds": listing_ids,
+        "sellerEmail": seller["email"],
+        "errors": errors[:20],
     }
 
 

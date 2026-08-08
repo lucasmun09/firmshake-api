@@ -4,6 +4,7 @@ from flask import Blueprint
 
 from routes.v1.agreements import agreements_bp, webhooks_bp
 from routes.v1.blocks import blocks_bp
+from routes.v1.browse import browse_bp
 from routes.v1.catalog import catalog_bp
 from routes.v1.communities import communities_bp
 from routes.v1.inbox import inbox_bp
@@ -19,5 +20,6 @@ v1_bp.register_blueprint(users_bp, url_prefix="/users")
 v1_bp.register_blueprint(blocks_bp, url_prefix="/users/me/blocks")
 v1_bp.register_blueprint(communities_bp, url_prefix="/communities")
 v1_bp.register_blueprint(catalog_bp)
+v1_bp.register_blueprint(browse_bp, url_prefix="/browse")
 
 __all__ = ["v1_bp"]

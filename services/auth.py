@@ -1,6 +1,10 @@
+import logging
+
 from firebase_admin import auth
 
 from services.firebase_app import get_db
+
+logger = logging.getLogger("firmshake.auth")
 
 
 class AuthError(Exception):
@@ -22,11 +26,13 @@ def verify_firebase_token_optional(authorization_header: str | None) -> str | No
     try:
         decoded = auth.verify_id_token(token)
     except Exception as exc:
-        raise AuthError("Invalid Firebase token", 401) from exc
+        logger.info("Optional auth ignored invalid Firebase token", exc_info=exc)
+        return None
 
     uid = decoded.get("uid")
     if not uid:
-        raise AuthError("Invalid Firebase token", 401)
+        logger.info("Optional auth ignored Firebase token without uid")
+        return None
     return uid
 
 

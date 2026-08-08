@@ -110,7 +110,9 @@ def _map_profile_community_ids(uid: str, profile: dict) -> dict:
     }
 
 
-def list_categories() -> list[dict]:
+def list_categories(*, active_only: bool = False) -> list[dict]:
+    from services.data.seed_categories import SEED_CATEGORIES
+
     db = get_db()
     snapshot = (
         db.collection("categories")
@@ -120,6 +122,8 @@ def list_categories() -> list[dict]:
     categories = []
     for doc in snapshot:
         data = doc.to_dict() or {}
+        if active_only and data.get("active") is False:
+            continue
         categories.append(
             {
                 "id": doc.id,
@@ -127,6 +131,26 @@ def list_categories() -> list[dict]:
                 "slug": str(data.get("slug") or doc.id),
                 "parentId": data.get("parentId"),
                 "sortOrder": data.get("sortOrder"),
+                "active": data.get("active", True),
             }
         )
-    return categories
+
+    if categories:
+        return categories
+
+    seed = [
+        entry
+        for entry in SEED_CATEGORIES
+        if not active_only or entry.get("active", True)
+    ]
+    return [
+        {
+            "id": entry["id"],
+            "name": entry["name"],
+            "slug": entry["slug"],
+            "parentId": entry.get("parentId"),
+            "sortOrder": entry.get("sortOrder"),
+            "active": entry.get("active", True),
+        }
+        for entry in seed
+    ]
