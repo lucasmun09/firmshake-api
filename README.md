@@ -82,13 +82,17 @@ Or copy `.env.example` to `.env` and load via `python-dotenv` (already enabled i
 | `FLASK_HOST` | `0.0.0.0` | Bind host |
 | `FLASK_PORT` | `5001` | Bind port |
 | `FLASK_DEBUG` | `true` | Debug mode |
-| `FIREBASE_PROJECT_ID` | `firmshake-dev` | Firebase project ID |
+| `FIREBASE_PROJECT_ID` | `firmshake-dev` | Firebase project ID (`firmshake-prod` on prod) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | — | Path to service account JSON (required for meetups) |
+| `PAYMENTS_ENABLED` | `true` | Meetup deposits; set `false` on prod (alias `STRIPE_PAYMENTS_ENABLED`) |
 | `ETA_SPEED_MPH` | `25` | Assumed travel speed for ETA fallback |
 | `ARRIVAL_RADIUS_METERS` | `100` | Distance considered "arrived" |
 | `GCS_BUCKET` | — | Private bucket for listing images (empty = local disk) |
+| `TYPESENSE_HOST` / `TYPESENSE_API_KEY` | — | Separate Typesense cluster per stack |
 | `IMAGE_UPLOAD_RATE_LIMIT` | `20` | Max uploads per user per window |
 | `IMAGE_UPLOAD_RATE_WINDOW_SECONDS` | `3600` | Upload rate-limit window (seconds) |
+
+**Dual-stack:** deovo = `firmshake-dev` + `scripts/deploy-staging.sh`; prod = `firmshake-prod` / us-east1 + `scripts/deploy-prod.sh` + `.cloudrun.env.prod.yaml`. See sibling repo `firmshake/docs/devo-prod-stacks.md`.
 
 ## Tests
 
@@ -97,6 +101,15 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+## Deploy
+
+```bash
+bash scripts/deploy-staging.sh   # deovo
+bash scripts/deploy-devo.sh      # alias
+# bash scripts/deploy-prod.sh    # after firmshake-prod exists
+```
+
+CI (`.github/workflows/deploy-api.yml`): unit tests → deploy deovo → health smoke → deploy prod.
 
 Physical devices cannot reach `localhost`. Run a tunnel and point the app's `VITE_API_BASE_URL` at it:
 

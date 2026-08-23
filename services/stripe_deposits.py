@@ -3,6 +3,8 @@
 import os
 from typing import Any
 
+from config import are_payments_enabled
+
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
 
@@ -14,6 +16,8 @@ class StripeDepositError(Exception):
 
 
 def is_stripe_configured() -> bool:
+    if not are_payments_enabled():
+        return False
     return bool(STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET)
 
 
@@ -26,6 +30,9 @@ def create_deposit_checkout_session(
     success_url: str,
     cancel_url: str,
 ) -> dict[str, Any]:
+    if not are_payments_enabled():
+        raise StripeDepositError("Payments are disabled on this environment", 503)
+
     if not is_stripe_configured():
         raise StripeDepositError("Stripe is not configured", 503)
 
@@ -73,6 +80,9 @@ def create_deposit_checkout_session(
 
 
 def verify_stripe_webhook(payload: bytes, sig_header: str | None) -> dict[str, Any]:
+    if not are_payments_enabled():
+        raise StripeDepositError("Payments are disabled on this environment", 503)
+
     if not is_stripe_configured():
         raise StripeDepositError("Stripe is not configured", 503)
 

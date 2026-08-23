@@ -411,6 +411,89 @@ def test_browse_search_firestore_price_filter(monkeypatch):
     assert result["listings"][0]["title"] == "Small lamp"
 
 
+def test_browse_search_always_includes_pin_groups(monkeypatch):
+    class FakeDoc:
+        def __init__(self, doc_id, data):
+            self.id = doc_id
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class FakeQuery:
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, *args, **kwargs):
+            return self
+
+        def stream(self):
+            return [
+                FakeDoc(
+                    "l1",
+                    {
+                        "title": "Alpha",
+                        "description": "",
+                        "price": 10,
+                        "communityIds": ["all"],
+                        "primaryCategoryId": "general",
+                        "categoryIds": ["general"],
+                        "status": "active",
+                        "sellerId": "seller-a",
+                        "sellerName": "Sam",
+                        "imageUrl": "/img.jpg",
+                        "lat": 38.75011,
+                        "lng": -77.47091,
+                    },
+                ),
+                FakeDoc(
+                    "l2",
+                    {
+                        "title": "Beta",
+                        "description": "",
+                        "price": 20,
+                        "communityIds": ["all"],
+                        "primaryCategoryId": "general",
+                        "categoryIds": ["general"],
+                        "status": "active",
+                        "sellerId": "seller-a",
+                        "sellerName": "Sam",
+                        "imageUrl": "/img2.jpg",
+                        "lat": 38.75014,
+                        "lng": -77.47096,
+                    },
+                ),
+            ]
+
+    class FakeCollection:
+        def document(self, _community_id):
+            return self
+
+        def collection(self, _name):
+            return self
+
+        def where(self, *args, **kwargs):
+            return FakeQuery()
+
+    class FakeDb:
+        def collection(self, name):
+            assert name == "communityFeeds"
+            return FakeCollection()
+
+    monkeypatch.setenv("TYPESENSE_HOST", "")
+    monkeypatch.setattr("services.firebase_app.get_db", lambda: FakeDb())
+
+    result = browse_search(page_size=10)
+
+    assert "pinGroups" in result
+    assert len(result["pinGroups"]) == 1
+    assert result["pinGroups"][0]["kind"] == "aggregated"
+    assert set(result["pinGroups"][0]["listingIds"]) == {"l1", "l2"}
+
+
 def test_post_browse_search_ignores_invalid_token(client):
     with patch("routes.v1.browse.browse_search") as mock_search:
         mock_search.return_value = {
@@ -480,6 +563,41 @@ def test_post_browse_search_passes_auth_uid(client):
 
     assert response.status_code == 200
     assert mock_search.call_args.kwargs["viewer_uid"] == "user-1"
+
+
+def test_firestore_fetch_limit_caps_scan_window():
+    from services.browse_search import _firestore_fetch_limit
+
+    assert _firestore_fetch_limit(1, 24) == 72
+    assert _firestore_fetch_limit(10, 24) == 264
+    assert _firestore_fetch_limit(50, 24) == 1000
+
+
+def test_finalize_browse_page_passes_through_pagination():
+    from services.browse_search import _finalize_browse_page
+
+    page = _finalize_browse_page(
+        listings=[{"id": "listing-1"}],
+        total=500,
+        page=3,
+        page_size=100,
+        has_more=True,
+        engine="firestore",
+    )
+
+    assert page["total"] == 500
+    assert page["hasMore"] is True
+    assert "maxResults" not in page
+
+    last_page = _finalize_browse_page(
+        listings=[{"id": "listing-1"}],
+        total=500,
+        page=5,
+        page_size=100,
+        has_more=False,
+        engine="firestore",
+    )
+    assert last_page["hasMore"] is False
 
 
 def test_get_categories_cache_headers(client):

@@ -2,6 +2,11 @@ from flask import Blueprint, g, jsonify, request
 
 from services.auth import AuthError, verify_firebase_token_optional
 from services.browse_search import browse_search
+from services.browse_search_cache import (
+    build_browse_search_cache_key,
+    get_cached_browse_search,
+    set_cached_browse_search,
+)
 
 browse_bp = Blueprint("v1_browse", __name__)
 
@@ -58,14 +63,27 @@ def _parse_search_payload(payload: dict) -> dict:
 
 @browse_bp.post("/search")
 def post_browse_search():
-    """Public browse search — optional auth for block-list filtering."""
+    """Public browse search — optional auth for block-list filtering.
+
+    Response always includes seller-aggregated `pinGroups` for map rendering.
+    """
     try:
         viewer_uid = verify_firebase_token_optional(request.headers.get("Authorization"))
         g.authenticated_uid = viewer_uid
         payload = request.get_json(silent=True) or {}
         params = _parse_search_payload(payload)
+        cache_key = build_browse_search_cache_key(params, viewer_uid)
+        cached = get_cached_browse_search(cache_key)
+        if cached is not None:
+            response = jsonify(cached)
+            response.headers["X-Browse-Cache"] = "HIT"
+            return response, 200
+
         result = browse_search(**params, viewer_uid=viewer_uid)
-        return jsonify(result), 200
+        set_cached_browse_search(cache_key, result)
+        response = jsonify(result)
+        response.headers["X-Browse-Cache"] = "MISS"
+        return response, 200
     except AuthError as exc:
         return _auth_error_response(exc)
     except ValueError:

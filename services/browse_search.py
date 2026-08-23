@@ -16,6 +16,7 @@ logger = logging.getLogger("firmshake.browse_search")
 
 DEFAULT_PAGE_SIZE = 24
 MAX_PAGE_SIZE = 100
+FIRESTORE_FALLBACK_MAX_SCAN = int(os.getenv("BROWSE_FIRESTORE_MAX_SCAN", "1000"))
 
 SORT_NEWEST = "newest"
 SORT_PRICE_ASC = "price_asc"
@@ -23,6 +24,31 @@ SORT_PRICE_DESC = "price_desc"
 SORT_DISTANCE = "distance"
 
 VALID_SORTS = {SORT_NEWEST, SORT_PRICE_ASC, SORT_PRICE_DESC, SORT_DISTANCE}
+
+
+def _firestore_fetch_limit(page: int, page_size: int) -> int:
+    """Max Firestore docs to read per fallback request (scan window, not a session cap)."""
+    return min(max(page * page_size + page_size, page_size * 3), FIRESTORE_FALLBACK_MAX_SCAN)
+
+
+def _finalize_browse_page(
+    *,
+    listings: list[dict[str, Any]],
+    total: int,
+    page: int,
+    page_size: int,
+    has_more: bool,
+    engine: str,
+) -> dict[str, Any]:
+    return {
+        "listings": listings,
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "hasMore": has_more,
+        "engine": engine,
+        "projectId": FIREBASE_PROJECT_ID,
+    }
 
 
 class TypesenseClient:
@@ -225,7 +251,7 @@ def browse_search(
     client = TypesenseClient()
     if client.enabled:
         try:
-            return _browse_search_typesense(
+            result = _browse_search_typesense(
                 client,
                 q=q,
                 community_id=community_id,
@@ -241,13 +267,14 @@ def browse_search(
                 page_size=page_size,
                 blocked_sellers=blocked_sellers,
             )
+            return _attach_map_pins(result)
         except Exception as exc:
             logger.warning(
                 "Typesense browse search failed; falling back to Firestore",
                 exc_info=exc,
             )
 
-    return _browse_search_firestore(
+    result = _browse_search_firestore(
         q=q,
         community_id=community_id,
         category_ids=normalized_categories,
@@ -262,6 +289,15 @@ def browse_search(
         page_size=page_size,
         blocked_sellers=blocked_sellers,
     )
+    return _attach_map_pins(result)
+
+
+def _attach_map_pins(result: dict[str, Any]) -> dict[str, Any]:
+    from services.browse_map_pins import aggregate_browse_map_pins
+
+    enriched = dict(result)
+    enriched["pinGroups"] = aggregate_browse_map_pins(result.get("listings") or [])
+    return enriched
 
 
 def _browse_search_typesense(
@@ -325,15 +361,14 @@ def _browse_search_typesense(
     hits = [_serialize_listing_hit(hit["document"]) for hit in result.get("hits", [])]
     total = int(result.get("found", 0))
 
-    return {
-        "listings": hits,
-        "total": total,
-        "page": page,
-        "pageSize": page_size,
-        "hasMore": page * page_size < total,
-        "engine": "typesense",
-        "projectId": FIREBASE_PROJECT_ID,
-    }
+    return _finalize_browse_page(
+        listings=hits,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=page * page_size < total,
+        engine="typesense",
+    )
 
 
 def _apply_firestore_post_filters(
@@ -436,6 +471,7 @@ def _collect_firestore_feed_page(
     radius_km: float | None,
     blocked_sellers: set[str],
     page_size: int,
+    max_scan_docs: int | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Walk the feed with Firestore cursors until we have target_end filtered rows or exhaust the feed."""
     from google.cloud.firestore_v1 import Query
@@ -446,6 +482,7 @@ def _collect_firestore_feed_page(
     batch_size = max(page_size * 2, 50)
     max_batches = 500
     batches = 0
+    raw_scanned = 0
 
     while len(collected) < target_end and not feed_exhausted and batches < max_batches:
         batches += 1
@@ -461,6 +498,7 @@ def _collect_firestore_feed_page(
         feed_has_more = len(snapshots) > batch_size
         page_snapshots = snapshots[:batch_size]
         last_snapshot = page_snapshots[-1]
+        raw_scanned += len(page_snapshots)
 
         mapped = [map_feed_doc(doc.id, doc.to_dict() or {}) for doc in page_snapshots]
         filtered = _apply_firestore_post_filters(
@@ -480,7 +518,12 @@ def _collect_firestore_feed_page(
         if not feed_has_more:
             feed_exhausted = True
 
-    return collected, not feed_exhausted
+        if max_scan_docs is not None and raw_scanned >= max_scan_docs:
+            break
+
+    return collected, not feed_exhausted and (
+        max_scan_docs is None or raw_scanned < max_scan_docs
+    )
 
 
 def _browse_search_firestore(
@@ -520,9 +563,11 @@ def _browse_search_firestore(
     search_active = bool(q.strip())
 
     if normalized_sort == SORT_NEWEST:
+        fetch_limit = _firestore_fetch_limit(page, page_size)
+        collect_target = fetch_limit if search_active else target_end
         collected, feed_has_more = _collect_firestore_feed_page(
             base_query=base_query,
-            target_end=target_end if not search_active else max(target_end, 10_000),
+            target_end=collect_target,
             q=q,
             category_ids=category_ids,
             min_price=min_price,
@@ -533,6 +578,7 @@ def _browse_search_firestore(
             radius_km=radius_km,
             blocked_sellers=blocked_sellers,
             page_size=page_size,
+            max_scan_docs=fetch_limit,
         )
         if search_active:
             collected = _sort_firestore_docs(
@@ -546,8 +592,8 @@ def _browse_search_firestore(
         has_more = len(collected) > target_end or feed_has_more
         total = len(collected) if not has_more else max(len(collected), target_end + 1)
     else:
-        # Non-newest sorts require in-memory ordering; scan a window large enough for this page.
-        fetch_limit = min(max(page * page_size + page_size, page_size * 3), 1000)
+        # Non-newest sorts require in-memory ordering; scan a bounded window for this page.
+        fetch_limit = _firestore_fetch_limit(page, page_size)
         query = base_query.order_by("createdAt", direction="DESCENDING").limit(fetch_limit)
         docs = [map_feed_doc(doc.id, doc.to_dict() or {}) for doc in query.stream()]
         docs = _apply_firestore_post_filters(
@@ -567,12 +613,11 @@ def _browse_search_firestore(
         total = len(docs)
         has_more = target_end < total or len(docs) >= fetch_limit
 
-    return {
-        "listings": page_docs,
-        "total": total,
-        "page": page,
-        "pageSize": page_size,
-        "hasMore": has_more,
-        "engine": "firestore",
-        "projectId": FIREBASE_PROJECT_ID,
-    }
+    return _finalize_browse_page(
+        listings=page_docs,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=has_more,
+        engine="firestore",
+    )

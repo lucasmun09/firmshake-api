@@ -29,6 +29,27 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 GCS_BUCKET = os.getenv("GCS_BUCKET", "").strip()
 
+
+def _parse_bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def are_payments_enabled() -> bool:
+    """Meetup deposits / Stripe. Prod sets PAYMENTS_ENABLED=false until go-live.
+
+    Alias: STRIPE_PAYMENTS_ENABLED wins when set.
+    Default True for deovo/local backward compatibility.
+    """
+    if os.getenv("STRIPE_PAYMENTS_ENABLED", "").strip():
+        return _parse_bool_env("STRIPE_PAYMENTS_ENABLED", True)
+    return _parse_bool_env("PAYMENTS_ENABLED", True)
+
+
+PAYMENTS_ENABLED = are_payments_enabled()
+
 IMAGE_UPLOAD_RATE_LIMIT = int(os.getenv("IMAGE_UPLOAD_RATE_LIMIT", "20"))
 IMAGE_UPLOAD_RATE_WINDOW_SECONDS = int(os.getenv("IMAGE_UPLOAD_RATE_WINDOW_SECONDS", "3600"))
 

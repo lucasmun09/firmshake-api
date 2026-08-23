@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Deploy API to deovo / staging (firmshake-dev, us-central1).
+# Alias: scripts/deploy-devo.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
