@@ -4,6 +4,7 @@ from services.authorization import (
     ALL_COMMUNITY_ID,
     can_lookup_user_by_email,
     can_manage_community_moderators,
+    can_mark_listing_sold,
     can_modify_target_moderator_access,
     can_moderate_listing,
     can_remove_listing,
@@ -35,6 +36,14 @@ def test_can_remove_listing_seller_or_moderator():
     assert can_remove_listing(seller_profile, listing, "seller-1") is True
     assert can_remove_listing(mod_profile, listing, "mod-1") is True
     assert can_remove_listing(seller_profile, listing, "other-user") is False
+
+
+def test_can_mark_listing_sold_seller_only():
+    listing = {"status": "active", "communityIds": ["neighborhood-a"], "sellerId": "seller-1"}
+    assert can_mark_listing_sold("seller-1", listing) is True
+    assert can_mark_listing_sold("mod-1", listing) is False
+    assert can_mark_listing_sold("seller-1", {**listing, "status": "sold"}) is False
+    assert can_mark_listing_sold("seller-1", {**listing, "status": "removed"}) is False
 
 
 def test_can_update_listing_requires_active_seller():

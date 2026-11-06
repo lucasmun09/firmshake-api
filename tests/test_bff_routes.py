@@ -118,6 +118,31 @@ def test_v1_create_listing_success(client):
     assert response.get_json()["id"] == "listing-1"
 
 
+def test_v1_mark_listing_sold_requires_auth(client):
+    response = client.post("/api/v1/listings/listing-1/sold")
+    assert response.status_code == 401
+
+
+def test_v1_mark_listing_sold_success(client):
+    with patch("routes.v1.listings.verify_firebase_token", return_value="seller-1"):
+        with patch("routes.v1.listings.mark_listing_sold") as mock_sold:
+            mock_sold.return_value = {
+                "id": "listing-1",
+                "title": "Mountain Bike",
+                "status": "sold",
+                "sellerId": "seller-1",
+            }
+
+            response = client.post(
+                "/api/v1/listings/listing-1/sold",
+                headers={"Authorization": "Bearer fake-token"},
+            )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "sold"
+    mock_sold.assert_called_once_with("seller-1", "listing-1")
+
+
 def test_notifications_push_requires_relationship(client):
     with patch("routes.notifications.verify_firebase_token", return_value="actor-1"):
         with patch(

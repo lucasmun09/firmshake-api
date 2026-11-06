@@ -7,6 +7,7 @@ from services.listing_pipeline import (
     ListingPipelineError,
     browse_listings,
     create_listing,
+    mark_listing_sold,
     remove_listing,
     update_listing,
 )
@@ -121,3 +122,20 @@ def post_remove_listing(listing_id: str):
         return _bff_error_response(exc)
     except Exception:
         return jsonify({"error": "Failed to remove listing"}), 500
+
+
+@listings_bp.post("/<listing_id>/sold")
+def post_mark_listing_sold(listing_id: str):
+    try:
+        actor_uid = verify_firebase_token(request.headers.get("Authorization"))
+        g.authenticated_uid = actor_uid
+        listing = mark_listing_sold(actor_uid, listing_id)
+        return jsonify(listing), 200
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except AuthorizationError as exc:
+        return _authorization_error_response(exc)
+    except ListingPipelineError as exc:
+        return _bff_error_response(exc)
+    except Exception:
+        return jsonify({"error": "Failed to mark listing as sold"}), 500

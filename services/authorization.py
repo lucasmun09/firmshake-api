@@ -67,6 +67,11 @@ def can_delist_own_listing(profile_uid: str, listing: dict) -> bool:
     return listing.get("sellerId") == profile_uid
 
 
+def can_mark_listing_sold(profile_uid: str, listing: dict) -> bool:
+    """Seller-only: mark an active listing as sold (not a moderator action)."""
+    return can_delist_own_listing(profile_uid, listing)
+
+
 def can_remove_listing(
     user_profile: dict | None,
     listing: dict,

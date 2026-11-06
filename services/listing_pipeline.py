@@ -5,6 +5,7 @@ from google.cloud import firestore
 from services.authorization import (
     ALL_COMMUNITY_ID,
     AuthorizationError,
+    can_mark_listing_sold,
     can_remove_listing,
     can_update_listing,
     get_user_profile,
@@ -344,6 +345,59 @@ def remove_listing(actor_uid: str, listing_id: str) -> dict:
 
     try:
         _sync_search_index(listing_id, removed)
+    except Exception as exc:
+        raise ListingPipelineError(f"Search index sync failed: {exc}", 502) from exc
+
+    updated_snapshot = listing_ref.get()
+    return _serialize_listing_response(listing_id, updated_snapshot.to_dict() or {})
+
+
+def mark_listing_sold(actor_uid: str, listing_id: str) -> dict:
+    db = get_db()
+    listing_id, existing = _get_listing_or_error(db, listing_id)
+
+    if existing.get("status") != "active":
+        raise ListingPipelineError("This listing is no longer active", 400)
+
+    if not can_mark_listing_sold(actor_uid, existing):
+        raise AuthorizationError("Only the seller can mark this listing as sold")
+
+    listing_ref = db.collection("listings").document(listing_id)
+    listing_ref.update(
+        {
+            "status": "sold",
+            "soldAt": firestore.SERVER_TIMESTAMP,
+            "soldBy": actor_uid,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+
+    sold = {
+        **existing,
+        "status": "sold",
+    }
+    created_at = existing.get("createdAt")
+    if created_at is not None and hasattr(created_at, "timestamp"):
+        sold["createdAtMs"] = int(created_at.timestamp() * 1000)
+
+    community_ids = list(existing.get("communityIds") or [])
+    batch = db.batch()
+    for community_id in _feed_targets(community_ids):
+        feed_ref = (
+            db.collection("communityFeeds")
+            .document(community_id)
+            .collection("listings")
+            .document(listing_id)
+        )
+        batch.set(
+            feed_ref,
+            {"status": "sold", "updatedAt": firestore.SERVER_TIMESTAMP},
+            merge=True,
+        )
+    batch.commit()
+
+    try:
+        _sync_search_index(listing_id, sold)
     except Exception as exc:
         raise ListingPipelineError(f"Search index sync failed: {exc}", 502) from exc
 
