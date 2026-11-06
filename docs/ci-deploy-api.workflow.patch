@@ -1,5 +1,5 @@
---- /tmp/deploy-api-old.yml	2026-11-05 21:18:17
-+++ /tmp/deploy-api-new.yml	2026-11-05 21:18:17
+--- a/.github/workflows/deploy-api.yml
++++ b/.github/workflows/deploy-api.yml
 @@ -60,6 +60,9 @@
      steps:
        - uses: actions/checkout@v4
