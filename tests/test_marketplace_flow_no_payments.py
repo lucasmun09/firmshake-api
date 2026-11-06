@@ -244,7 +244,7 @@ def test_marketplace_surfaces_sold_public_photo_description_without_payments(cli
     assert sold.get_json()["status"] == "sold"
     assert "stripe" not in str(sold.get_json()).lower()
 
-    # 4) Browse search still accepts description-bearing queries (engine ranks body text).
+    # 4) Browse search accepts description-bearing `q` (engine ranks body text).
     with patch("routes.v1.browse.browse_search") as mock_search:
         mock_search.return_value = {
             "listings": [
@@ -271,7 +271,7 @@ def test_marketplace_surfaces_sold_public_photo_description_without_payments(cli
             "/api/v1/browse/search",
             json={
                 "communityId": "all",
-                "query": "trail bike",
+                "q": "trail bike",
                 "page": 1,
                 "pageSize": 24,
             },
@@ -282,10 +282,8 @@ def test_marketplace_surfaces_sold_public_photo_description_without_payments(cli
     assert "trail bike" in hit["description"].lower()
     assert "paymentIntentId" not in hit
     mock_search.assert_called_once()
-    assert mock_search.call_args.args[0].get("query") == "trail bike" or (
-        mock_search.call_args.kwargs.get("query") == "trail bike"
-        or (mock_search.call_args.args and True)
-    )
+    assert mock_search.call_args.kwargs["q"] == "trail bike"
+    assert mock_search.call_args.kwargs["community_id"] == "all"
 
 
 def test_marketplace_payment_routes_remain_disabled_or_absent(client):
