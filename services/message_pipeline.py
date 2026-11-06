@@ -11,6 +11,8 @@ from services.message_authorization import (
 from services.push import send_push_to_user
 
 MAX_MESSAGE_TEXT_LENGTH = 1000
+MAX_MESSAGE_IMAGE_URL_LENGTH = 2048
+MESSAGE_IMAGE_PREVIEW_TEXT = "Photo"
 
 
 class MessagePipelineError(Exception):
@@ -161,7 +163,8 @@ def _serialize_message(listing_id: str, message_id: str, data: dict) -> dict:
     if created_at is not None and hasattr(created_at, "timestamp"):
         created_ms = int(created_at.timestamp() * 1000)
 
-    return {
+    image_url = data.get("imageUrl")
+    mapped = {
         "id": message_id,
         "listingId": listing_id,
         "senderId": data.get("senderId", ""),
@@ -170,17 +173,28 @@ def _serialize_message(listing_id: str, message_id: str, data: dict) -> dict:
         "recipientId": data.get("recipientId"),
         "createdAt": created_ms,
     }
+    if isinstance(image_url, str) and image_url.strip():
+        mapped["imageUrl"] = image_url.strip()
+    return mapped
 
 
-def _validate_payload(payload: dict) -> tuple[str, str, str | None]:
+def _validate_payload(payload: dict) -> tuple[str, str, str | None, str | None]:
     text = str(payload.get("text", "")).strip()
-    if not text:
+    raw_image = payload.get("imageUrl")
+    image_url = str(raw_image).strip() if raw_image is not None else ""
+
+    if not text and not image_url:
         raise MessagePipelineError("Message cannot be empty", 400)
     if len(text) > MAX_MESSAGE_TEXT_LENGTH:
         raise MessagePipelineError(
             f"Message must be at most {MAX_MESSAGE_TEXT_LENGTH} characters",
             400,
         )
+    if len(image_url) > MAX_MESSAGE_IMAGE_URL_LENGTH:
+        raise MessagePipelineError("Image URL is too long", 400)
+
+    if not text and image_url:
+        text = MESSAGE_IMAGE_PREVIEW_TEXT
 
     sender_name = str(payload.get("senderName", "")).strip()
     if not sender_name:
@@ -191,7 +205,7 @@ def _validate_payload(payload: dict) -> tuple[str, str, str | None]:
     if explicit_recipient == "":
         explicit_recipient = None
 
-    return text, sender_name, explicit_recipient
+    return text, sender_name, explicit_recipient, (image_url or None)
 
 
 def send_listing_message(actor_uid: str, listing_id: str, payload: dict) -> dict:
@@ -200,7 +214,7 @@ def send_listing_message(actor_uid: str, listing_id: str, payload: dict) -> dict
         raise MessagePipelineError("Listing id is required", 400)
 
     try:
-        text, sender_name, explicit_recipient = _validate_payload(payload)
+        text, sender_name, explicit_recipient, image_url = _validate_payload(payload)
     except MessagePipelineError:
         raise
     except Exception as exc:
@@ -226,6 +240,8 @@ def send_listing_message(actor_uid: str, listing_id: str, payload: dict) -> dict
         "recipientId": recipient_id,
         "createdAt": firestore.SERVER_TIMESTAMP,
     }
+    if image_url:
+        message_payload["imageUrl"] = image_url
 
     message_ref = (
         db.collection("listings").document(listing_id).collection("messages").document()

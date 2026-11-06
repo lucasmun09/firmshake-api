@@ -90,10 +90,73 @@ def test_send_listing_message_rejects_empty_text():
             send_listing_message(BUYER_ID, LISTING_ID, {"text": "   ", "senderName": "Bob"})
 
 
+def test_send_listing_message_accepts_image_only():
+    mock_db = MagicMock()
+    listing_snapshot = _listing_snapshot()
+
+    message_doc = MagicMock()
+    message_doc.id = "msg-img"
+    created_snapshot = MagicMock()
+    created_snapshot.to_dict.return_value = {
+        "senderId": BUYER_ID,
+        "senderName": "Buyer Bob",
+        "text": "Photo",
+        "imageUrl": "https://cdn.example/photo.jpg",
+        "recipientId": SELLER_ID,
+        "createdAt": MagicMock(timestamp=lambda: 1_700_000_000.0),
+    }
+    message_doc.get.return_value = created_snapshot
+
+    messages_collection = MagicMock()
+    messages_collection.document.return_value = message_doc
+
+    listing_doc = MagicMock()
+    listing_doc.get.return_value = listing_snapshot
+    listing_doc.collection.return_value = messages_collection
+
+    listings_collection = MagicMock()
+    listings_collection.document.return_value = listing_doc
+    mock_db.collection.return_value = listings_collection
+
+    with patch("services.message_pipeline.get_db", return_value=mock_db):
+        with patch("services.message_authorization.is_user_blocked", return_value=False):
+            with patch("services.message_pipeline._sync_message_threads"):
+                with patch("services.message_pipeline._create_message_notification"):
+                    result = send_listing_message(
+                        BUYER_ID,
+                        LISTING_ID,
+                        {
+                            "text": "  ",
+                            "senderName": "Buyer Bob",
+                            "imageUrl": "https://cdn.example/photo.jpg",
+                        },
+                    )
+
+    assert result["text"] == "Photo"
+    assert result["imageUrl"] == "https://cdn.example/photo.jpg"
+    set_payload = message_doc.set.call_args.args[0]
+    assert set_payload["text"] == "Photo"
+    assert set_payload["imageUrl"] == "https://cdn.example/photo.jpg"
+
+
 def test_send_listing_message_rejects_missing_sender_name():
     with patch("services.message_pipeline.get_db"):
         with pytest.raises(MessagePipelineError, match="senderName"):
             send_listing_message(BUYER_ID, LISTING_ID, {"text": "Hi"})
+
+
+def test_send_listing_message_rejects_image_url_over_limit():
+    with patch("services.message_pipeline.get_db"):
+        with pytest.raises(MessagePipelineError, match="Image URL is too long"):
+            send_listing_message(
+                BUYER_ID,
+                LISTING_ID,
+                {
+                    "text": "",
+                    "senderName": "Bob",
+                    "imageUrl": "https://cdn.example/" + ("x" * 2048),
+                },
+            )
 
 
 def test_send_listing_message_rejects_text_over_limit():
