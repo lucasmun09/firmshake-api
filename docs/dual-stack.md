@@ -40,6 +40,7 @@ Devo (`firmshake-dev`, staging Cloud Run us-central1) vs prod (`firmshake-prod`,
 | Browse Firestore fallback | `services/browse_search_firestore.py` |
 | Browse response cache | `services/browse_search_cache.py` |
 | Browse map pin aggregation | `services/browse_map_pins.py` |
+| Browse summary projection (`POST /summary`) | `services/browse_summary.py` → `routes/v1/browse.py` |
 | Env YAML assert | `scripts/assert-cloudrun-env.sh` (also refuses active `STRIPE_*` on prod) |
 | Preflight (assert only) | `scripts/preflight-api.sh` |
 | Cross-repo prod readiness | `scripts/check-prod-readiness.sh` → sibling web dry-run |

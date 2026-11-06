@@ -103,6 +103,7 @@ def test_module_map_files_exist_for_parallel_agents():
         "services/browse_search_common.py",
         "services/browse_search_typesense.py",
         "services/browse_search_firestore.py",
+        "services/browse_summary.py",
         "scripts/assert-cloudrun-env.sh",
         "scripts/preflight-api.sh",
         "scripts/check-prod-readiness.sh",
