@@ -84,7 +84,7 @@ Or copy `.env.example` to `.env` and load via `python-dotenv` (already enabled i
 | `FLASK_DEBUG` | `true` | Debug mode |
 | `FIREBASE_PROJECT_ID` | `firmshake-dev` | Firebase project ID (`firmshake-prod` on prod) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | — | Path to service account JSON (required for meetups) |
-| `PAYMENTS_ENABLED` | `true` | Meetup deposits; set `false` on prod (alias `STRIPE_PAYMENTS_ENABLED`) |
+| `PAYMENTS_ENABLED` | `true` | Devo mock deposits when Stripe unset; set `false` on prod (no processor this phase) |
 | `ETA_SPEED_MPH` | `25` | Assumed travel speed for ETA fallback |
 | `ARRIVAL_RADIUS_METERS` | `100` | Distance considered "arrived" |
 | `GCS_BUCKET` | — | Private bucket for listing images (empty = local disk) |
@@ -92,24 +92,34 @@ Or copy `.env.example` to `.env` and load via `python-dotenv` (already enabled i
 | `IMAGE_UPLOAD_RATE_LIMIT` | `20` | Max uploads per user per window |
 | `IMAGE_UPLOAD_RATE_WINDOW_SECONDS` | `3600` | Upload rate-limit window (seconds) |
 
-**Dual-stack:** deovo = `firmshake-dev` + `scripts/deploy-staging.sh`; prod = `firmshake-prod` / us-east1 + `scripts/deploy-prod.sh` + `.cloudrun.env.prod.yaml`. See sibling repo `firmshake/docs/devo-prod-stacks.md`.
+**Dual-stack:** deovo = `firmshake-dev` + `scripts/deploy-staging.sh`; prod = `firmshake-prod` / us-east1 + `scripts/deploy-prod.sh` + `.cloudrun.env.prod.yaml` (`PAYMENTS_ENABLED=false`). See [docs/dual-stack.md](docs/dual-stack.md) and sibling `firmshake/docs/devo-prod-stacks.md`.
+
+```bash
+bash scripts/preflight-api.sh deovo
+bash scripts/preflight-api.sh prod   # refuses REPLACE_ME / payments on / control-panel CORS / STRIPE_*
+bash scripts/check-prod-readiness.sh  # cross-repo dry-run: list ALL blockers
+# After deploy:
+bash scripts/smoke-health.sh https://firmshake-api-staging-858269838319.us-central1.run.app deovo
+```
 
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
+# Dual-stack focused:
+pytest tests/test_payments_enabled.py tests/test_stack_config.py tests/test_assert_cloudrun_env.py tests/test_check_prod_readiness.py tests/test_health_stack.py tests/test_smoke_health_script.py -q
 ```
 
 ## Deploy
 
 ```bash
-bash scripts/deploy-staging.sh   # deovo
+bash scripts/deploy-staging.sh   # deovo (runs assert-cloudrun-env)
 bash scripts/deploy-devo.sh      # alias
-# bash scripts/deploy-prod.sh    # after firmshake-prod exists
+# bash scripts/deploy-prod.sh    # after .cloudrun.env.prod.yaml has real reCAPTCHA (no REPLACE_ME)
 ```
 
-CI (`.github/workflows/deploy-api.yml`): unit tests → deploy deovo → health smoke → deploy prod.
+CI (`.github/workflows/deploy-api.yml`): unit tests → deploy deovo → health smoke → soft-gated prod (`PROD_DEPLOY_ENABLED`).
 
 Physical devices cannot reach `localhost`. Run a tunnel and point the app's `VITE_API_BASE_URL` at it:
 
@@ -135,7 +145,7 @@ Use the ngrok URL when testing on a phone.
 - [x] Meetup location ETA endpoints (privacy-preserving)
 - [x] FCM push notification delivery
 - [ ] Firebase token verification on image uploads
-- [ ] Stripe deposit + penalty webhooks
+- [ ] Deposit payment processor (deferred — dual-stack ships without one)
 - [ ] Admin community seeding endpoints
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design.

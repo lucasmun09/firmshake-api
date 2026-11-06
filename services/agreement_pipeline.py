@@ -27,7 +27,7 @@ from services.stripe_deposits import (
     create_deposit_checkout_session,
     is_stripe_configured,
 )
-from config import are_payments_enabled
+from services.payments_flag import PAYMENTS_DISABLED_MESSAGE, are_payments_enabled
 
 
 class AgreementPipelineError(Exception):
@@ -354,7 +354,7 @@ def cancel_active_agreement_on_block(actor_uid: str, agreement_id: str) -> dict 
 def create_deposit(actor_uid: str, agreement_id: str, payload: dict | None = None) -> dict:
     if not are_payments_enabled():
         raise AgreementPipelineError(
-            "Payments are temporarily disabled on this environment",
+            PAYMENTS_DISABLED_MESSAGE,
             503,
         )
 

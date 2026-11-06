@@ -1,9 +1,13 @@
-"""Stripe checkout for FirmShake deposits (optional — mock path when not configured)."""
+"""Stripe checkout helpers (unused this phase).
+
+Dual-stack / prod ship without a payment processor. Keep Stripe keys unset.
+When PAYMENTS_ENABLED is true without keys, agreement_pipeline uses mock deposits.
+"""
 
 import os
 from typing import Any
 
-from config import are_payments_enabled
+from services.payments_flag import are_payments_enabled
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()

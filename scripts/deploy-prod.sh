@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploy API to prod (firmshake-prod / us-east1).
 # Requires: firmshake-prod project, Artifact Registry, Cloud Run service, .cloudrun.env.prod.yaml filled in.
-# See ../docs or firmshake/docs/devo-prod-stacks.md.
+# See firmshake/docs/devo-prod-stacks.md.
+# Refuses REPLACE_ME placeholders and firmshake-dev project wiring.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,6 +20,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+if [[ "$PROJECT_ID" != "firmshake-prod" ]]; then
+  echo "ERROR: Refusing prod API deploy — FIREBASE_PROJECT_ID=${PROJECT_ID} (expected firmshake-prod)." >&2
+  exit 1
+fi
+
+# Fail closed on placeholders / deovo cross-wire / payments / CORS.
+bash "$ROOT/scripts/assert-cloudrun-env.sh" prod "$ENV_FILE"
+
 echo "Building linux/amd64 image for prod (${REGION})..."
 docker build --platform linux/amd64 -t "$IMAGE" .
 
@@ -35,5 +44,13 @@ gcloud run deploy "$SERVICE" \
   --memory 512Mi \
   --env-vars-file "$ENV_FILE"
 
-echo "Done. Resolve the service URL with:"
-echo "  gcloud run services describe ${SERVICE} --region ${REGION} --project ${PROJECT_ID} --format='value(status.url)'"
+URL="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --project "${PROJECT_ID}" --format='value(status.url)' 2>/dev/null || true)"
+echo "Done."
+if [[ -n "$URL" ]]; then
+  echo "  Cloud Run URL: $URL"
+  echo "  Set web VITE_API_BASE_URL to that URL in .env.production.local + GitHub Environment prod, then:"
+  echo "    cd ../firmshake && npm run deploy:prod"
+else
+  echo "  Resolve the service URL with:"
+  echo "    gcloud run services describe ${SERVICE} --region ${REGION} --project ${PROJECT_ID} --format='value(status.url)'"
+fi

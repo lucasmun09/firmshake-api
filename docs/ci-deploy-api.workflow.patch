@@ -1,0 +1,36 @@
+--- /tmp/deploy-api-old.yml	2026-11-05 21:18:17
++++ /tmp/deploy-api-new.yml	2026-11-05 21:18:17
+@@ -60,6 +60,9 @@
+     steps:
+       - uses: actions/checkout@v4
+ 
++      - name: Assert deovo Cloud Run env
++        run: bash scripts/assert-cloudrun-env.sh deovo .cloudrun.env.yaml
++
+       # TODO(wif): replace credentials_json with workload_identity_provider + service_account
+       - uses: google-github-actions/auth@v2
+         with:
+@@ -99,10 +102,11 @@
+     runs-on: ubuntu-latest
+     environment: deovo
+     steps:
+-      - name: Health check
++      - uses: actions/checkout@v4
++      - name: Health check (stack identity + payments flag)
+         run: |
+           URL="${{ secrets.API_BASE_URL || 'https://firmshake-api-staging-858269838319.us-central1.run.app' }}"
+-          curl -fsS --retry 5 --retry-delay 5 "${URL}/health"
++          bash scripts/smoke-health.sh "$URL" deovo
+ 
+   deploy_prod:
+     name: Deploy prod
+@@ -129,6 +133,9 @@
+     steps:
+       - uses: actions/checkout@v4
+ 
++      - name: Assert prod Cloud Run env (no deovo cross-wire / payments off)
++        run: bash scripts/assert-cloudrun-env.sh prod .cloudrun.env.prod.yaml
++
+       # TODO(wif): replace credentials_json with workload_identity_provider + service_account
+       # Requires firmshake-prod + GitHub Environment `prod` secret GCP_SA_KEY (or WIF).
+       - uses: google-github-actions/auth@v2

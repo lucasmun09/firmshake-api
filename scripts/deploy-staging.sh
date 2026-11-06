@@ -8,6 +8,8 @@ IMAGE="us-central1-docker.pkg.dev/firmshake-dev/firmshake/api:staging-latest"
 
 cd "$ROOT"
 
+bash "$ROOT/scripts/assert-cloudrun-env.sh" deovo "$ROOT/.cloudrun.env.yaml"
+
 echo "Building linux/amd64 image..."
 docker build --platform linux/amd64 -t "$IMAGE" .
 

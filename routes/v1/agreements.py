@@ -15,7 +15,7 @@ from services.agreement_pipeline import (
 )
 from services.stripe_deposits import StripeDepositError, is_stripe_configured, verify_stripe_webhook
 from services.agreement_pipeline import confirm_deposit_from_stripe_webhook
-from config import are_payments_enabled
+from services.payments_flag import are_payments_enabled
 
 agreements_bp = Blueprint("v1_agreements", __name__)
 webhooks_bp = Blueprint("v1_webhooks", __name__)
