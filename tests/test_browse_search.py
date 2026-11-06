@@ -14,6 +14,7 @@ def test_matches_keyword():
     listing = {"title": "Red Mountain Bike", "sellerName": "Sam", "description": "Great condition"}
     assert matches_keyword(listing, "mountain bike") is True
     assert matches_keyword(listing, "blue car") is False
+    assert matches_keyword(listing, "condition") is True
 
 
 def test_map_feed_doc_reads_lat_lng_fields():

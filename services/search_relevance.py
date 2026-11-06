@@ -1,4 +1,4 @@
-"""Title/seller search relevance helpers for browse search."""
+"""Title / seller / description search relevance helpers for browse search."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ def normalize_search_query(query_text: str) -> str:
 def search_relevance_score(listing: dict[str, Any], query_text: str) -> int:
     """
     Higher score = stronger match.
-    exact title > starts-with > all tokens in title > any token in title > seller name.
+    exact title > starts-with > all tokens in title > any token in title
+    > seller name > description body.
     """
     normalized = normalize_search_query(query_text)
     if not normalized:
@@ -20,6 +21,7 @@ def search_relevance_score(listing: dict[str, Any], query_text: str) -> int:
 
     title = str(listing.get("title", "")).strip().lower()
     seller = str(listing.get("sellerName", "")).strip().lower()
+    description = str(listing.get("description", "")).strip().lower()
     terms = normalized.split()
 
     if title == normalized:
@@ -38,8 +40,11 @@ def search_relevance_score(listing: dict[str, Any], query_text: str) -> int:
         return 300
     if any(term in seller for term in terms):
         return 200
+    if all(term in description for term in terms):
+        return 100
+    if any(term in description for term in terms):
+        return 50
 
-    # TODO: description search — add when product wants full-text body matching.
     return 0
 
 

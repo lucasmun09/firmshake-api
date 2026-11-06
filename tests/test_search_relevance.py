@@ -24,6 +24,33 @@ def test_matches_keyword_title_and_seller():
     assert matches_keyword(listing, "blue car") is False
 
 
-def test_matches_keyword_ignores_description_only():
+def test_matches_keyword_description_only():
     listing = {"title": "Desk lamp", "description": "Great for your office", "sellerName": "Pat"}
-    assert matches_keyword(listing, "office") is False
+    assert matches_keyword(listing, "office") is True
+    # Single-token query hits the all-tokens description branch.
+    assert search_relevance_score(listing, "office") == 100
+
+
+def test_search_relevance_description_ranks_below_seller():
+    description_only = search_relevance_score(
+        {"title": "Desk lamp", "description": "Great for your office", "sellerName": "Pat"},
+        "office",
+    )
+    seller_hit = search_relevance_score(
+        {"title": "Desk lamp", "description": "", "sellerName": "Office Depot"},
+        "office",
+    )
+    assert seller_hit > description_only
+
+
+def test_search_relevance_all_description_tokens_beat_any():
+    all_tokens = search_relevance_score(
+        {"title": "Lamp", "description": "Bright office desk light", "sellerName": "Pat"},
+        "office desk",
+    )
+    any_token = search_relevance_score(
+        {"title": "Lamp", "description": "Bright office light", "sellerName": "Pat"},
+        "office desk",
+    )
+    assert all_tokens == 100
+    assert any_token == 50

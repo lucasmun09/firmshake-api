@@ -57,9 +57,9 @@ def browse_search_typesense(
 
     params = {
         "q": q or "*",
-        # TODO: add description to query_by when product wants full-text body matching.
-        "query_by": "title,sellerName",
-        "query_by_weights": "3,1",
+        # Title > seller > description (description is full-text body matching).
+        "query_by": "title,sellerName,description",
+        "query_by_weights": "4,2,1",
         "filter_by": " && ".join(filters),
         "page": str(page),
         "per_page": str(page_size),
