@@ -81,9 +81,13 @@ def test_env_example_documents_dual_stack_and_no_processor():
 def test_smoke_health_and_payload_share_required_fields():
     smoke = _read("scripts/smoke-health.sh")
     payload = _read("services/health_payload.py")
+    routes = _read("routes/health.py")
     for field in ("status", "service", "stack", "firebaseProjectId", "paymentsEnabled"):
         assert field in smoke, field
         assert field in payload, field
+    assert "/ready" in smoke
+    assert "ready" in payload
+    assert '@health_bp.get("/ready")' in routes or '@health_bp.get(\'/ready\')' in routes
     # Payload builder body (exclude module docstring) must not emit secret/stripe keys.
     body = payload.split('"""', 2)[-1] if '"""' in payload else payload
     assert "secret" not in body.lower()
@@ -95,6 +99,10 @@ def test_module_map_files_exist_for_parallel_agents():
         "services/payments_flag.py",
         "services/stack_config.py",
         "services/health_payload.py",
+        "services/browse_search.py",
+        "services/browse_search_common.py",
+        "services/browse_search_typesense.py",
+        "services/browse_search_firestore.py",
         "scripts/assert-cloudrun-env.sh",
         "scripts/preflight-api.sh",
         "scripts/check-prod-readiness.sh",

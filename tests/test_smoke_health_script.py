@@ -12,12 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "smoke-health.sh"
 
 
-def _serve_health(payload: dict) -> tuple[HTTPServer, str]:
-    body = json.dumps(payload).encode("utf-8")
+def _serve_health(payload: dict, *, ready_payload: dict | None = None) -> tuple[HTTPServer, str]:
+    health_body = json.dumps(payload).encode("utf-8")
+    ready = dict(ready_payload) if ready_payload is not None else {**payload, "ready": True}
+    ready_body = json.dumps(ready).encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            if self.path.rstrip("/") != "/health":
+            path = self.path.rstrip("/")
+            if path == "/health":
+                body = health_body
+            elif path == "/ready":
+                body = ready_body
+            else:
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -61,6 +68,7 @@ def test_smoke_health_accepts_devo_payload():
         result = _run(base, "deovo")
         assert result.returncode == 0, result.stderr + result.stdout
         assert "OK:" in result.stdout
+        assert "ready" in result.stdout.lower() or "OK: ready" in result.stdout
     finally:
         server.shutdown()
 
@@ -130,6 +138,22 @@ def test_smoke_health_rejects_cross_wired_project():
     )
     try:
         result = _run(base, "prod")
+        assert result.returncode != 0
+    finally:
+        server.shutdown()
+
+
+def test_smoke_health_rejects_ready_without_ready_flag():
+    payload = {
+        "status": "ok",
+        "service": "firmshake-api",
+        "stack": "devo",
+        "firebaseProjectId": "firmshake-dev",
+        "paymentsEnabled": True,
+    }
+    server, base = _serve_health(payload, ready_payload=payload)
+    try:
+        result = _run(base, "deovo")
         assert result.returncode != 0
     finally:
         server.shutdown()

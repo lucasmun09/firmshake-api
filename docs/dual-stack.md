@@ -33,13 +33,20 @@ Devo (`firmshake-dev`, staging Cloud Run us-central1) vs prod (`firmshake-prod`,
 |---|---|
 | Payments flag | `services/payments_flag.py` |
 | Stack IDs + CORS catalogs | `services/stack_config.py` |
-| `/health` payload | `services/health_payload.py` → `routes/health.py` |
+| `/health` + `/ready` payload | `services/health_payload.py` → `routes/health.py` |
+| Browse search orchestration | `services/browse_search.py` |
+| Browse Typesense client + serialize | `services/browse_search_common.py` |
+| Browse Typesense engine | `services/browse_search_typesense.py` |
+| Browse Firestore fallback | `services/browse_search_firestore.py` |
+| Browse response cache | `services/browse_search_cache.py` |
+| Browse map pin aggregation | `services/browse_map_pins.py` |
 | Env YAML assert | `scripts/assert-cloudrun-env.sh` (also refuses active `STRIPE_*` on prod) |
 | Preflight (assert only) | `scripts/preflight-api.sh` |
 | Cross-repo prod readiness | `scripts/check-prod-readiness.sh` → sibling web dry-run |
-| Health smoke | `scripts/smoke-health.sh` |
+| Health + ready smoke | `scripts/smoke-health.sh` |
 | Deploy | `scripts/deploy-staging.sh`, `scripts/deploy-prod.sh` |
 | Stripe / deposits | `services/stripe_deposits.py` (gates on payments flag) |
+| Browse summary (local-first) | `services/browse_summary.py` → `POST /api/v1/browse/summary` |
 
 `config.py` re-exports `are_payments_enabled` and resolves `APP_STACK` for convenience.
 
@@ -88,12 +95,16 @@ Sibling checklist: `firmshake/docs/devo-prod-stacks.md` → **Human-only leftove
 }
 ```
 
-Prod smoke expects `stack=prod`, `firebaseProjectId=firmshake-prod`, `paymentsEnabled=false`.
+## `/ready` contract
+
+Same fields as `/health`, plus `"ready": true`. Use for Cloud Run / load-balancer readiness probes. No secret-bearing dependency checks in this phase.
+
+Prod smoke expects `stack=prod`, `firebaseProjectId=firmshake-prod`, `paymentsEnabled=false` (and `ready=true` on `/ready`).
 
 ## Tests
 
 ```bash
-.venv/bin/pytest tests/test_payments_enabled.py tests/test_stack_config.py tests/test_assert_cloudrun_env.py tests/test_check_prod_readiness.py tests/test_health_stack.py tests/test_smoke_health_script.py tests/test_env_contracts.py -q
+.venv/bin/pytest tests/test_payments_enabled.py tests/test_stack_config.py tests/test_assert_cloudrun_env.py tests/test_check_prod_readiness.py tests/test_health_stack.py tests/test_ready_endpoint.py tests/test_cors_runtime.py tests/test_cors_web_lockstep.py tests/test_browse_search_modules.py tests/test_smoke_health_script.py tests/test_env_contracts.py -q
 ```
 
 

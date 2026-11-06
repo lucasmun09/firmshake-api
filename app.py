@@ -40,6 +40,7 @@ def create_app() -> Flask:
         resources={
             r"/api/*": {"origins": CORS_ORIGINS},
             r"/health": {"origins": CORS_ORIGINS},
+            r"/ready": {"origins": CORS_ORIGINS},
         },
     )
 

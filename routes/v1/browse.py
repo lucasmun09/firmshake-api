@@ -7,6 +7,7 @@ from services.browse_search_cache import (
     get_cached_browse_search,
     set_cached_browse_search,
 )
+from services.browse_summary import browse_summary_search
 
 browse_bp = Blueprint("v1_browse", __name__)
 
@@ -61,25 +62,32 @@ def _parse_search_payload(payload: dict) -> dict:
     }
 
 
-@browse_bp.post("/search")
-def post_browse_search():
-    """Public browse search — optional auth for block-list filtering.
+def _run_browse_endpoint(*, summary: bool):
+    """Shared search/summary handler — optional auth for block-list filtering.
 
     Response always includes seller-aggregated `pinGroups` for map rendering.
+    Summary mode strips description / imageUrls / sellerName before respond+cache.
     """
     try:
         viewer_uid = verify_firebase_token_optional(request.headers.get("Authorization"))
         g.authenticated_uid = viewer_uid
         payload = request.get_json(silent=True) or {}
         params = _parse_search_payload(payload)
-        cache_key = build_browse_search_cache_key(params, viewer_uid)
+        cache_key = build_browse_search_cache_key(
+            {**params, "responseShape": "summary" if summary else "full"},
+            viewer_uid,
+        )
         cached = get_cached_browse_search(cache_key)
         if cached is not None:
             response = jsonify(cached)
             response.headers["X-Browse-Cache"] = "HIT"
             return response, 200
 
-        result = browse_search(**params, viewer_uid=viewer_uid)
+        result = (
+            browse_summary_search(**params, viewer_uid=viewer_uid)
+            if summary
+            else browse_search(**params, viewer_uid=viewer_uid)
+        )
         set_cached_browse_search(cache_key, result)
         response = jsonify(result)
         response.headers["X-Browse-Cache"] = "MISS"
@@ -90,3 +98,15 @@ def post_browse_search():
         return jsonify({"error": "Invalid search parameters"}), 400
     except Exception:
         return jsonify({"error": "Search is temporarily unavailable"}), 500
+
+
+@browse_bp.post("/search")
+def post_browse_search():
+    """Full listing documents — prefer /summary for browse cards/map."""
+    return _run_browse_endpoint(summary=False)
+
+
+@browse_bp.post("/summary")
+def post_browse_summary():
+    """Local-first summary listings (primary imageUrl only) + pinGroups."""
+    return _run_browse_endpoint(summary=True)
