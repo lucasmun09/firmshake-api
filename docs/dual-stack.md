@@ -96,13 +96,13 @@ Prod smoke expects `stack=prod`, `firebaseProjectId=firmshake-prod`, `paymentsEn
 .venv/bin/pytest tests/test_payments_enabled.py tests/test_stack_config.py tests/test_assert_cloudrun_env.py tests/test_check_prod_readiness.py tests/test_health_stack.py tests/test_smoke_health_script.py tests/test_env_contracts.py -q
 ```
 
-## Workflow YAML patch (apply with `workflow` scope)
 
-Agent HTTPS tokens often lack GitHub `workflow` scope, so CI edits ship as a patch:
+## Install CI workflow (requires `workflow` scope)
 
 ```bash
-git apply docs/ci-deploy-api.workflow.patch
+mkdir -p .github/workflows
+cp docs/ci-workflows/deploy-api.yml .github/workflows/deploy-api.yml
+git add .github/workflows/deploy-api.yml && git commit -m "Install deploy-api workflow" && git push
 ```
 
-Then push with a `workflow`-scoped credential. Soft gate `PROD_DEPLOY_ENABLED` stays unset until a manual prod deploy is proven. Sibling web: `firmshake/docs/ci-deploy-web.workflow.patch`.
-
+Leave `PROD_DEPLOY_ENABLED` unset until a manual prod deploy is proven.
