@@ -50,7 +50,7 @@ def test_patch_me_updates_profile(client):
 
 
 def test_get_public_profile(client):
-    with patch("routes.v1.users.verify_firebase_token", return_value="viewer-1"):
+    with patch("routes.v1.users.verify_firebase_token_optional", return_value="viewer-1"):
         with patch("routes.v1.users.get_public_user") as mock_get:
             mock_get.return_value = {
                 "uid": "user-2",
@@ -66,6 +66,20 @@ def test_get_public_profile(client):
     body = response.get_json()
     assert body["displayName"] == "Public User"
     assert "email" not in body
+
+
+def test_get_public_profile_allows_guest(client):
+    with patch("routes.v1.users.verify_firebase_token_optional", return_value=None):
+        with patch("routes.v1.users.get_public_user") as mock_get:
+            mock_get.return_value = {
+                "uid": "user-2",
+                "displayName": "Guest Visible",
+                "photoUrl": None,
+            }
+            response = client.get("/api/v1/users/user-2/public")
+
+    assert response.status_code == 200
+    assert response.get_json()["displayName"] == "Guest Visible"
 
 
 def test_by_email_requires_moderator(client):

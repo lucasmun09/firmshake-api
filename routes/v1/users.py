@@ -1,6 +1,6 @@
 from flask import Blueprint, g, jsonify, request
 
-from services.auth import AuthError, verify_firebase_token
+from services.auth import AuthError, verify_firebase_token, verify_firebase_token_optional
 from services.authorization import AuthorizationError
 from services.rate_limit import RateLimitExceeded, assert_email_lookup_allowed
 from services.user_pipeline import (
@@ -86,8 +86,11 @@ def get_by_email():
 
 @users_bp.get("/<uid>/public")
 def get_public(uid: str):
+    """Public seller card — auth optional so guests can open /seller/:id via BFF."""
     try:
-        verify_firebase_token(request.headers.get("Authorization"))
+        actor_uid = verify_firebase_token_optional(request.headers.get("Authorization"))
+        if actor_uid:
+            g.authenticated_uid = actor_uid
         profile = get_public_user(uid)
         return jsonify(profile), 200
     except AuthError as exc:
